@@ -2,9 +2,10 @@ from datetime import datetime
 
 import fasthtml.common as fh
 from pydantic import BaseModel
+
 from yapml.client.navbar import navbar
 from yapml.client.styles import yapml_gray_color
-from yapml.datamodel import BoundingBox, Label, ObjectDetectionSample, suppress_stale_boxes
+from yapml.datamodel import BoundingBox, ObjectDetectionSample, suppress_stale_boxes
 
 # Add JavaScript for drag and resize functionality
 DRAG_SCRIPT = """
@@ -180,6 +181,7 @@ async function updateBoxPosition() {
                 center_y: centerY,
                 width: width,
                 height: height,
+                annotator_name: "Toby Change D",
             })
         });
         
@@ -419,7 +421,8 @@ async function stopDrawing(e) {
                 center_x: centerX,
                 center_y: centerY,
                 width: normalizedWidth,
-                height: normalizedHeight
+                height: normalizedHeight,
+                annotator_name: "Toby Change D",
             };
             
             console.log('Sending payload:', payload);
@@ -505,6 +508,7 @@ def render_box(box, max_width, max_height):
     left = x - w / 2
     top = y - h / 2
 
+    resize_handle_style_shared = "width: 10px; height: 10px; position: absolute; background: transparent;"
     # Create the box with all its components
     return fh.Div(
         {
@@ -547,22 +551,22 @@ def render_box(box, max_width, max_height):
             # Resize handles
             fh.Div(
                 {"data-direction": "nw"},
-                style="position:absolute; top:-5px; left:-5px; width:10px; height:10px; cursor:nw-resize; background:transparent;",
+                style="top: -5px; left: -5px; cursor: nw-resize;" + resize_handle_style_shared,
                 cls="resize-handle nw",
             ),
             fh.Div(
                 {"data-direction": "ne"},
-                style="position:absolute; top:-5px; right:-5px; width:10px; height:10px; cursor:ne-resize; background:transparent;",
+                style="top: -5px; right: -5px; cursor: ne-resize;" + resize_handle_style_shared,
                 cls="resize-handle ne",
             ),
             fh.Div(
                 {"data-direction": "sw"},
-                style="position:absolute; bottom:-5px; left:-5px; width:10px; height:10px; cursor:sw-resize; background:transparent;",
+                style="bottom: -5px; left: -5px; cursor: sw-resize;" + resize_handle_style_shared,
                 cls="resize-handle sw",
             ),
             fh.Div(
                 {"data-direction": "se"},
-                style="position:absolute; bottom:-5px; right:-5px; width:10px; height:10px; cursor:se-resize; background:transparent;",
+                style="bottom: -5px; right: -5px; cursor: se-resize;" + resize_handle_style_shared,
                 cls="resize-handle se",
             ),
         ],
@@ -648,23 +652,44 @@ def boxes_to_changes(boxes: list[BoundingBox]) -> list[BoxChange]:
     changes: list[BoxChange] = []
     for box in boxes:
         if not box.previous_box_id:
-            event = "created"
+            changes.append(
+                BoxChange(
+                    label_name=box.label.name,
+                    annotator_name=box.annotator_name,
+                    event="created",
+                    time_delta=time_delta_string(box.created_at),
+                )
+            )
+            if box.deleted_at:
+                changes.append(
+                    BoxChange(
+                        label_name=box.label.name,
+                        annotator_name=box.annotator_name,
+                        event="deleted",
+                        time_delta=time_delta_string(box.deleted_at),
+                    )
+                )
         else:
             previous_box = box_by_id[box.previous_box_id]
             if previous_box.width != box.width or previous_box.height != box.height:
-                event = "resized"
-            elif previous_box.center_x != box.center_x or previous_box.center_y != box.center_y:
-                event = "moved"
-            else:
-                continue  # Skip if no changes
-        changes.append(
-            BoxChange(
-                label_name=box.label.name,
-                annotator_name=box.annotator_name,
-                event=event,
-                time_delta=time_delta_string(box.created_at),
-            )
-        )
+                changes.append(
+                    BoxChange(
+                        label_name=box.label.name,
+                        annotator_name=box.annotator_name,
+                        event="resized",
+                        time_delta=time_delta_string(box.created_at),
+                    )
+                )
+            if previous_box.center_x != box.center_x or previous_box.center_y != box.center_y:
+                changes.append(
+                    BoxChange(
+                        label_name=box.label.name,
+                        annotator_name=box.annotator_name,
+                        event="moved",
+                        time_delta=time_delta_string(box.created_at),
+                    )
+                )
+
     return changes
 
 
@@ -733,8 +758,8 @@ def render_sample_list_page(samples: list[ObjectDetectionSample]):
     return page
 
 
-def render_sample_page(sample: ObjectDetectionSample) -> fh.Html:
-    history = render_sample_history(list(sample.boxes), sample.id)
+def render_sample_page(sample: ObjectDetectionSample, boxes: list[BoundingBox]) -> fh.Html:
+    history = render_sample_history(boxes, sample.id)
     card = render_image_card(sample)
     main = (
         fh.Main(

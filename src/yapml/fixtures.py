@@ -4,6 +4,7 @@ from io import BytesIO
 import requests
 from PIL import Image as PILImage
 from sqlmodel import Session, create_engine
+
 from yapml.config import image_dir, image_url_prefix, sqlite_url
 from yapml.datamodel import BoundingBox, Label, ObjectDetectionSample
 
@@ -23,12 +24,8 @@ def populate_db() -> None:
 
     with Session(engine) as session:
         # First transaction: Add images
-        sample1 = ObjectDetectionSample(
-            filename="test1.jpg", width=500, height=500, url=f"{image_url_prefix}/test1.jpg"
-        )
-        sample2 = ObjectDetectionSample(
-            filename="test2.jpg", width=500, height=500, url=f"{image_url_prefix}/test2.jpg"
-        )
+        sample1 = ObjectDetectionSample(key="test1.jpg", width=500, height=500, url=f"{image_url_prefix}/test1.jpg")
+        sample2 = ObjectDetectionSample(key="test2.jpg", width=500, height=500, url=f"{image_url_prefix}/test2.jpg")
         session.add_all([sample1, sample2])
         session.commit()
 
